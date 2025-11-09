@@ -48,16 +48,25 @@ const Index = () => {
     
     const pin = numbers.join("");
     
+    if (pin.length === 0) {
+      return { characters, numbers, pin4: "", pin6: "" };
+    }
+    
     let pin4: string, pin6: string;
     
-    if (pin.length === 3) {
+    if (pin.length < 3) {
+      // For very short PINs, repeat to get minimum length
+      const repeated = pin.repeat(Math.ceil(4 / pin.length));
+      pin4 = repeated.slice(0, 4);
+      pin6 = repeated.slice(0, 6);
+    } else if (pin.length === 3) {
       const doubled = pin + pin;
       pin6 = doubled;
       pin4 = doubled.slice(0, 4);
     } else if (pin.length === 4) {
       const doubled = pin + pin;
       pin6 = doubled.slice(0, 6);
-      pin4 = doubled.slice(0, 4);
+      pin4 = pin;
     } else {
       pin4 = pin.slice(0, 4);
       pin6 = pin.slice(0, 6);
@@ -72,42 +81,58 @@ const Index = () => {
     setConvertedText("");
 
     if (!hindiWord.trim()) {
-      setError("कृपया देवनागरी शब्द दर्ज करें");
+      setError("Please enter a Devanagari word");
       return;
     }
 
     if (/\d/.test(hindiWord)) {
-      setError("अमान्य इनपुट। कृपया देवनागरी शब्द दर्ज करें");
+      setError("Invalid input. Please enter a Devanagari word");
       return;
     }
 
     let wordToProcess = hindiWord;
 
     // Check if input is ASCII (English)
-    if (/^[a-zA-Z]+$/.test(hindiWord)) {
+    if (/^[a-zA-Z\s]+$/.test(hindiWord.trim())) {
       try {
         // Convert English to Devanagari using ITRANS scheme
-        const converted = Sanscript.t(hindiWord.toLowerCase(), 'itrans', 'devanagari');
+        const converted = Sanscript.t(hindiWord.toLowerCase().trim(), 'itrans', 'devanagari');
+        if (!converted || converted.trim().length === 0) {
+          setError("Translation error. Please write in Devanagari.");
+          return;
+        }
         setConvertedText(converted);
         wordToProcess = converted;
       } catch (err) {
-        setError("अनुवाद में त्रुटि। कृपया देवनागरी में लिखें।");
+        setError("Translation error. Please write in Devanagari.");
         return;
       }
+    } else if (/[a-zA-Z]/.test(hindiWord) && !/^[a-zA-Z\s]+$/.test(hindiWord.trim())) {
+      // Mixed input (English + Devanagari) - not supported
+      setError("Please write only in Devanagari or only in English. Mixed input is not supported.");
+      return;
     }
 
     try {
       const processed = processWord(wordToProcess);
+      if (processed.numbers.length === 0 || !processed.pin4 || processed.pin4.length === 0) {
+        setError("PIN cannot be generated from this word. Please enter a word with Devanagari characters.");
+        return;
+      }
       setResult(processed);
-      toast.success("PIN सफलतापूर्वक जनरेट किया गया!");
+      toast.success("PIN generated successfully!");
     } catch (err) {
-      setError("प्रोसेसिंग में त्रुटि। कृपया पुनः प्रयास करें।");
+      setError("Processing error. Please try again.");
     }
   };
 
-  const copyToClipboard = (text: string, label: string) => {
-    navigator.clipboard.writeText(text);
-    toast.success(`${label} कॉपी किया गया!`);
+  const copyToClipboard = async (text: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success(`${label} copied!`);
+    } catch (err) {
+      toast.error("Copy error. Please copy manually.");
+    }
   };
 
   return (
@@ -120,10 +145,10 @@ const Index = () => {
             <Lock className="w-10 h-10 text-primary-foreground" />
           </div>
           <h1 className="text-4xl md:text-5xl font-bold text-foreground mb-4">
-            देवनागरी UPI PIN जेनरेटर
+            Devanagari UPI PIN Generator
           </h1>
           <p className="text-lg text-muted-foreground">
-            अपने देवनागरी शब्द को सुरक्षित UPI PIN में बदलें
+            Convert your Devanagari word into a secure UPI PIN
           </p>
         </div>
 
@@ -132,7 +157,7 @@ const Index = () => {
           <div className="space-y-6">
             <div>
               <label className="block text-sm font-medium text-foreground mb-2">
-                देवनागरी शब्द दर्ज करें (उदाहरण: भारद्वाज, पर्व) या English में लिखें
+                Enter a Devanagari word (example: भारद्वाज, पर्व) or write in English
               </label>
               <div className="flex gap-3">
                 <Input
@@ -140,7 +165,7 @@ const Index = () => {
                   value={hindiWord}
                   onChange={(e) => setHindiWord(e.target.value)}
                   onKeyPress={(e) => e.key === "Enter" && handleGenerate()}
-                  placeholder="यहां टाइप करें या bharat..."
+                  placeholder="Type here or bharat..."
                   className="text-2xl py-6 border-border focus:border-primary focus:ring-primary"
                   dir="auto"
                 />
@@ -149,13 +174,13 @@ const Index = () => {
                   className="px-8 bg-gradient-primary hover:opacity-90 transition-opacity shadow-accent"
                   size="lg"
                 >
-                  जनरेट करें
+                  Generate
                   <ArrowRight className="ml-2 w-5 h-5" />
                 </Button>
               </div>
               {convertedText && (
                 <p className="mt-2 text-sm text-primary animate-fade-in">
-                  देवनागरी में परिवर्तित: <span className="text-xl font-semibold">{convertedText}</span>
+                  Converted to Devanagari: <span className="text-xl font-semibold">{convertedText}</span>
                 </p>
               )}
               {error && (
@@ -171,7 +196,7 @@ const Index = () => {
             {/* Character Breakdown */}
             <Card className="p-6 shadow-medium border-border">
               <h3 className="text-lg font-semibold text-foreground mb-4">
-                शब्द विभाजन
+                Word Breakdown
               </h3>
               <div className="flex flex-wrap gap-3 mb-4">
                 {result.characters.map((char, idx) => (
@@ -201,19 +226,19 @@ const Index = () => {
               <Card className="p-6 bg-gradient-primary shadow-accent border-0">
                 <div className="text-center">
                   <p className="text-primary-foreground/80 text-sm font-medium mb-2">
-                    4 अंकों का PIN
+                    4-Digit PIN
                   </p>
                   <div className="text-5xl font-bold text-primary-foreground mb-4 font-mono tracking-wider">
                     {result.pin4}
                   </div>
                   <Button
-                    onClick={() => copyToClipboard(result.pin4, "4 अंकों का PIN")}
+                    onClick={() => copyToClipboard(result.pin4, "4-Digit PIN")}
                     variant="secondary"
                     size="sm"
                     className="w-full"
                   >
                     <Copy className="w-4 h-4 mr-2" />
-                    कॉपी करें
+                    Copy
                   </Button>
                 </div>
               </Card>
@@ -222,19 +247,19 @@ const Index = () => {
               <Card className="p-6 bg-gradient-accent shadow-accent border-0">
                 <div className="text-center">
                   <p className="text-accent-foreground/80 text-sm font-medium mb-2">
-                    6 अंकों का PIN
+                    6-Digit PIN
                   </p>
                   <div className="text-5xl font-bold text-accent-foreground mb-4 font-mono tracking-wider">
                     {result.pin6}
                   </div>
                   <Button
-                    onClick={() => copyToClipboard(result.pin6, "6 अंकों का PIN")}
+                    onClick={() => copyToClipboard(result.pin6, "6-Digit PIN")}
                     variant="secondary"
                     size="sm"
                     className="w-full"
                   >
                     <Copy className="w-4 h-4 mr-2" />
-                    कॉपी करें
+                    Copy
                   </Button>
                 </div>
               </Card>
@@ -243,7 +268,7 @@ const Index = () => {
             {/* Security Note */}
             <Card className="p-4 bg-muted/50 border-border">
               <p className="text-sm text-muted-foreground text-center">
-                🔒 अपने PIN को सुरक्षित रखें और किसी के साथ साझा न करें
+                🔒 Keep your PIN secure and do not share it with anyone
               </p>
             </Card>
           </div>
@@ -252,20 +277,20 @@ const Index = () => {
         {/* Info Section */}
         <Card className="mt-8 p-6 shadow-subtle border-border">
           <h3 className="text-lg font-semibold text-foreground mb-3">
-            कैसे उपयोग करें?
+            How to Use?
           </h3>
           <ul className="space-y-2 text-muted-foreground">
             <li className="flex items-start">
               <span className="text-primary mr-2">•</span>
-              कोई भी देवनागरी शब्द दर्ज करें या English में लिखें (जैसे: bharat → भरत)
+              Enter any Devanagari word or write in English (e.g., bharat → भरत)
             </li>
             <li className="flex items-start">
               <span className="text-primary mr-2">•</span>
-              प्रत्येक अक्षर एक विशिष्ट संख्या में परिवर्तित हो जाता है
+              Each character is converted to a specific number
             </li>
             <li className="flex items-start">
               <span className="text-primary mr-2">•</span>
-              याद रखने में आसान और सुरक्षित PIN बनाएं
+              Create an easy-to-remember and secure PIN
             </li>
           </ul>
         </Card>
